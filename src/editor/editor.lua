@@ -119,7 +119,7 @@ local function isFileAlteredOnDisk(editor)
           GetIDEString("editormessage"),
           wx.wxOK + wx.wxCENTRE, ide.frame)
       elseif not editor:GetReadOnly() and modTime:IsValid() and oldModTime:IsEarlierThan(modTime) then
-        local ret = (edcfg.autoreload and (not EditorIsModified(editor)) and wx.wxYES)
+        local ret = (edcfg.autoreload and (not ide:GetDocument(editor):IsModified()) and wx.wxYES)
           or wx.wxMessageBox(
             TR("File '%s' has been modified on disk."):format(fileName)
             .."\n"..TR("Do you want to reload it?"),
@@ -172,6 +172,10 @@ function SetEditorSelection(selection)
   if editor then
     editor:SetFocus()
     editor:SetSTCFocus(true)
+    -- when the active editor is changed while the focus is away from the application
+    -- (as happens on OSX when the editor is selected from the command bar)
+    -- the focus stays on wxAuiToolBar component, so need to explicitly switch it.
+    if ide.osname == "Macintosh" and ide.infocus then ide.infocus = editor end
 
     local id = editor:GetId()
     FileTreeMarkSelected(openDocuments[id] and openDocuments[id].filePath or '')
@@ -218,7 +222,7 @@ function EditorAutoComplete(editor)
 
   -- retrieve the current line and get a string to the current cursor position in the line
   local line = editor:GetCurrentLine()
-  local linetx = editor:GetLine(line)
+  local linetx = editor:GetLineDyn(line)
   local linestart = editor:PositionFromLine(line)
   local localpos = pos-linestart
 
@@ -234,19 +238,10 @@ function EditorAutoComplete(editor)
   -- know now which string is to be completed
   local userList = CreateAutoCompList(editor, lt, pos)
 
-  -- remove any suggestions that match the word the cursor is on
-  -- for example, if typing 'foo' in front of 'bar', 'foobar' is not offered
-  local right = linetx:sub(localpos+1,#linetx):match("^([%a_]+[%w_]*)")
-  if userList and right then
-    -- remove all spaces that may be left if "foo" removed from "foo foo"
-    userList = (userList:gsub("%f[%w_]"..lt..right.."%f[%W]","")
-      :gsub("^ +",""):gsub(" +$",""):gsub("  +"," "))
-  end
-
-  -- don't show the list if it only suggests what's already typed;
   -- don't show if what's typed so far matches one of the options
-  if userList and #userList > 0 and not lt:find(userList.."$")
-  and not userList:find("%f[%w_]"..lt..(right or "").."%f[%W]") then
+  local right = linetx:sub(localpos+1,#linetx):match("^([%a_]+[%w_]*)")
+  local left = lt:match("[%w_]*$") -- extract one word on the left (without separators)
+  if userList and #userList > 0 and not userList:find("%f[%w_]"..left..(right or "").."%f[^%w_]") then
     editor:UserListShow(1, userList)
   elseif editor:AutoCompActive() then
     editor:AutoCompCancel()
@@ -256,7 +251,7 @@ end
 local ident = "([a-zA-Z_][a-zA-Z_0-9%.%:]*)"
 local function getValAtPosition(editor, pos)
   local line = editor:LineFromPosition(pos)
-  local linetx = editor:GetLine(line)
+  local linetx = editor:GetLineDyn(line)
   local linestart = editor:PositionFromLine(line)
   local localpos = pos-linestart
 
@@ -275,7 +270,7 @@ local function getValAtPosition(editor, pos)
   local var = selected
     -- GetSelectedText() returns concatenated text when multiple instances
     -- are selected, so get the selected text based on start/end
-    and editor:GetTextRange(editor:GetSelectionStart(), editor:GetSelectionEnd())
+    and editor:GetTextRangeDyn(editor:GetSelectionStart(), editor:GetSelectionEnd())
     or (start and linetx:sub(start,localpos):gsub(":",".")..right or nil)
 
   -- since this function can be called in different contexts, we need
@@ -401,16 +396,6 @@ function EditorCallTip(editor, pos, x, y)
   end
 end
 
-function EditorIsModified(editor)
-  local modified = false
-  if editor then
-    local id = editor:GetId()
-    modified = openDocuments[id]
-      and (openDocuments[id].isModified or not openDocuments[id].filePath)
-  end
-  return modified
-end
-
 -- Indicator handling for functions and local/global variables
 local indicator = {
   FNCALL = ide:GetIndicator("core.fncall"),
@@ -438,7 +423,7 @@ function IndicateFunctionsOnly(editor, lines, linee)
 
   editor:SetIndicatorCurrent(indicator.FNCALL)
   for line=lines,linee do
-    local tx = editor:GetLine(line)
+    local tx = editor:GetLineDyn(line)
     local ls = editor:PositionFromLine(line)
     editor:IndicatorClearRange(ls, #tx)
 
@@ -591,7 +576,7 @@ function IndicateAll(editor, lines)
 
   local s = TimeGet()
   local canwork = start and 0.010 or 0.100 -- use shorter interval when typing
-  local f = editor.spec.marksymbols(editor:GetText(), pos, vars)
+  local f = editor.spec.marksymbols(editor:GetTextDyn(), pos, vars)
   while true do
     local op, name, lineinfo, vars, at, nobreak = f()
     if not op then break end
@@ -668,6 +653,7 @@ function CreateEditor(bare)
   editor.matchon = false
   editor.assignscache = false
   editor.bom = false
+  editor.updated = 0
   editor.jumpstack = {}
   editor.ctrlcache = {}
   editor.tokenlist = {}
@@ -704,7 +690,7 @@ function CreateEditor(bare)
   editor:SetViewWhiteSpace(edcfg.whitespace and true or false)
 
   if (edcfg.usewrap) then
-    editor:SetWrapMode(wxstc.wxSTC_WRAP_WORD)
+    editor:SetWrapMode(edcfg.wrapmode)
     editor:SetWrapStartIndent(0)
     if ide.wxver >= "2.9.5" then
       if edcfg.wrapflags then
@@ -791,6 +777,42 @@ function CreateEditor(bare)
   function editor:SetupKeywords(...) return SetupKeywords(self, ...) end
   function editor:ValueFromPosition(pos) return getValAtPosition(self, pos) end
 
+  function editor:MarkerGotoNext(marker)
+    local value = 2^marker
+    local line = editor:MarkerNext(editor:GetCurrentLine()+1, value)
+    if line == -1 then line = editor:MarkerNext(0, value) end
+    if line == -1 then return end
+    editor:GotoLine(line)
+    editor:EnsureVisibleEnforcePolicy(line)
+    return line
+  end
+  function editor:MarkerGotoPrev(marker)
+    local value = 2^marker
+    local line = editor:MarkerPrevious(editor:GetCurrentLine()-1, value)
+    if line == -1 then line = editor:MarkerPrevious(editor:GetLineCount(), value) end
+    if line == -1 then return end
+    editor:GotoLine(line)
+    editor:EnsureVisibleEnforcePolicy(line)
+    return line
+  end
+  function editor:MarkerToggle(marker, line, value)
+    line = line or editor:GetCurrentLine()
+    local isset = bit.band(editor:MarkerGet(line), 2^marker) > 0
+    if value ~= nil and isset == value then return end
+    if isset then
+      editor:MarkerDelete(line, marker)
+    else
+      editor:MarkerAdd(line, marker)
+    end
+    PackageEventHandle("onEditorMarkerUpdate", editor, marker, line, not isset)
+  end
+
+  function editor:BookmarkToggle(...) return self:MarkerToggle((StylesGetMarker("bookmark")), ...) end
+  function editor:BreakpointToggle(line, ...)
+    line = line or self:GetCurrentLine()
+    return DebuggerToggleBreakpoint(self, line, ...)
+  end
+
   function editor:DoWhenIdle(func) table.insert(self.onidle, func) end
 
   -- GotoPos should work by itself, but it doesn't (wx 2.9.5).
@@ -847,6 +869,10 @@ function CreateEditor(bare)
         editor.assignscache = false
       end
       local evtype = event:GetModificationType()
+      if bit.band(evtype, wxstc.wxSTC_MOD_CHANGEMARKER) == 0 then
+        -- this event is being called on OSX too frequently, so skip these notifications
+        editor.updated = TimeGet()
+      end
       local pos = event:GetPosition()
       local firstLine = editor:LineFromPosition(pos)
       local inserted = bit.band(evtype, wxstc.wxSTC_MOD_INSERTTEXT) ~= 0
@@ -869,14 +895,15 @@ function CreateEditor(bare)
       local beforeDeleted = bit.band(evtype,wxstc.wxSTC_MOD_BEFOREDELETE) ~= 0
 
       if (beforeInserted or beforeDeleted) then
-        -- unfold the current line being changed if folded
+        -- unfold the current line being changed if folded, but only if one selection
         local lastLine = editor:LineFromPosition(pos+event:GetLength())
-        if not editor:GetFoldExpanded(firstLine)
-        or not editor:GetLineVisible(firstLine)
-        or not editor:GetLineVisible(lastLine) then
-          editor:ToggleFold(firstLine)
+        local selections = ide.wxver >= "2.9.5" and editor:GetSelections() or 1
+        if (not editor:GetFoldExpanded(firstLine)
+          or not editor:GetLineVisible(firstLine)
+          or not editor:GetLineVisible(lastLine))
+        and selections == 1 then
           for line = firstLine, lastLine do
-            if not editor:GetLineVisible(line) then editor:ToggleFold(line) end
+            if not editor:GetLineVisible(line) then editor:ToggleFold(editor:GetFoldParent(line)) end
           end
         end
       end
@@ -895,7 +922,7 @@ function CreateEditor(bare)
       -- only required to track changes
 
       if beforeDeleted then
-        local text = editor:GetTextRange(pos, pos+event:GetLength())
+        local text = editor:GetTextRangeDyn(pos, pos+event:GetLength())
         local _, numlines = text:gsub("\r?\n","%1")
         DynamicWordsRem(editor,nil,firstLine, numlines)
       end
@@ -910,7 +937,7 @@ function CreateEditor(bare)
       local ch = event:GetKey()
       local pos = editor:GetCurrentPos()
       local line = editor:GetCurrentLine()
-      local linetx = editor:GetLine(line)
+      local linetx = editor:GetLineDyn(line)
       local linestart = editor:PositionFromLine(line)
       local localpos = pos-linestart
       local linetxtopos = linetx:sub(1,localpos)
@@ -921,7 +948,7 @@ function CreateEditor(bare)
         -- auto-indent
         if (line > 0) then
           local indent = editor:GetLineIndentation(line - 1)
-          local linedone = editor:GetLine(line - 1)
+          local linedone = editor:GetLineDyn(line - 1)
 
           -- if the indentation is 0 and the current line is not empty,
           -- but the previous line is empty, then take indentation from the
@@ -1031,7 +1058,7 @@ function CreateEditor(bare)
   local function addOneLine(editor, adj)
     local pos = editor:GetLineEndPosition(editor:LineFromPosition(editor:GetCurrentPos())+(adj or 0))
     local added = eol[editor:GetEOLMode()] or "\n"
-    editor:InsertText(pos, added)
+    editor:InsertTextDyn(pos, added)
     editor:SetCurrentPos(pos+#added)
 
     local ev = wxstc.wxStyledTextEvent(wxstc.wxEVT_STC_CHARADDED)
@@ -1131,25 +1158,26 @@ function CreateEditor(bare)
       end
     end)
 
-  local alreadyProcessed = 0
+  editor.processedUpdateContent = 0
   editor:Connect(wxstc.wxEVT_STC_UPDATEUI,
     function (event)
-      PackageEventHandle("onEditorUpdateUI", editor, event)
-
-      -- some of UPDATEUI events are triggered by blinking cursor, and since
-      -- there are no changes, the rest of the processing can be skipped;
-      -- the reason for `alreadyProcessed` is that it is not possible
+      -- some of UPDATEUI events may be triggered as the result of editor updates
+      -- from subsequent events (like PAINTED, which happens in documentmap plugin).
+      -- the reason for the `processed` check is that it is not possible
       -- to completely skip all of these updates as this causes the issue
       -- of markup styling becoming visible after text deletion by Backspace.
       -- to avoid this, we allow the first update after any updates caused
       -- by real changes; the rest of UPDATEUI events are skipped.
+      -- (use direct comparison, as need to skip events that just update content)
       if event:GetUpdated() == wxstc.wxSTC_UPDATE_CONTENT
       and not next(editor.ev) then
-         if alreadyProcessed > 1 then return end
+         if editor.processedUpdateContent > 1 then return end
       else
-         alreadyProcessed = 0
+         editor.processedUpdateContent = 0
       end
-      alreadyProcessed = alreadyProcessed + 1
+      editor.processedUpdateContent = editor.processedUpdateContent + 1
+
+      PackageEventHandle("onEditorUpdateUI", editor, event)
 
       if ide.osname ~= 'Windows' then updateStatusText(editor) end
 
@@ -1281,7 +1309,7 @@ function CreateEditor(bare)
             if edcfg.backspaceunindent and keycode == wx.WXK_BACK and not editor:GetUseTabs() then
               -- get the line number from the *current* position of the cursor
               local line = editor:LineFromPosition(pos+1)
-              local text = editor:GetLine(line):sub(1, pos-editor:PositionFromLine(line)+1)
+              local text = editor:GetLineDyn(line):sub(1, pos-editor:PositionFromLine(line)+1)
               local tw = editor:GetIndent()
               -- if on the tab stop position and only white spaces on the left
               if text:find('^%s+$') and #text % tw == 0 then
@@ -1302,10 +1330,6 @@ function CreateEditor(bare)
         -- if no "jump back" is needed, then do normal processing as this
         -- combination can be mapped to some action
         if not navigateBack(editor) then event:Skip() end
-      elseif (keycode == wx.WXK_DELETE and mod == wx.wxMOD_SHIFT)
-          or (keycode == wx.WXK_INSERT and mod == wx.wxMOD_CONTROL) then
-        ide.frame:AddPendingEvent(wx.wxCommandEvent(
-          wx.wxEVT_COMMAND_MENU_SELECTED, keycode == wx.WXK_INSERT and ID_COPY or ID_CUT))
       elseif (keycode == wx.WXK_RETURN or keycode == wx.WXK_NUMPAD_ENTER)
       and (mod == wx.wxMOD_CONTROL or mod == (wx.wxMOD_CONTROL + wx.wxMOD_SHIFT)) then
         addOneLine(editor, mod == (wx.wxMOD_CONTROL + wx.wxMOD_SHIFT) and -1 or 0)
@@ -1340,6 +1364,8 @@ function CreateEditor(bare)
       idx = idx + 1
     end
     if this then editor:SetMainSelection(this) end
+    -- set the current name as the search value to make subsequence searches look for it
+    ide.findReplace:SetFind(name)
   end
 
   editor:Connect(wxstc.wxEVT_STC_DOUBLECLICK,
@@ -1401,6 +1427,7 @@ function CreateEditor(bare)
         { ID_QUICKADDWATCH, TR("Add Watch Expression") },
         { ID_QUICKEVAL, TR("Evaluate In Console") },
         { ID_ADDTOSCRATCHPAD, TR("Add To Scratchpad") },
+        { ID_RUNTO, TR("Run To Cursor") },
       }
 
       menu:Enable(ID_GOTODEFINITION, instances and instances[0])
@@ -1425,6 +1452,13 @@ function CreateEditor(bare)
 
       editor:PopupMenu(menu)
       editor:SetMouseDwellTime(dwelltime) -- restore dwelling
+    end)
+
+  editor:Connect(ID_RUNTO, wx.wxEVT_COMMAND_MENU_SELECTED,
+    function()
+      if pos ~= wxstc.wxSTC_INVALID_POSITION then
+        ide:GetDebugger().runto(editor, editor:LineFromPosition(pos))
+      end
     end)
 
   editor:Connect(ID_GOTODEFINITION, wx.wxEVT_COMMAND_MENU_SELECTED,
@@ -1461,7 +1495,7 @@ function CreateEditor(bare)
       local text = wx.wxGetTextFromUser(
         TR("Enter replacement text"),
         TR("Replace All Selections"),
-        editor:GetTextRange(editor:GetSelectionNStart(main), editor:GetSelectionNEnd(main))
+        editor:GetTextRangeDyn(editor:GetSelectionNStart(main), editor:GetSelectionNEnd(main))
       )
       if not text or text == "" then return end
 

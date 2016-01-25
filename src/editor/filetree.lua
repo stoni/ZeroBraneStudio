@@ -1,11 +1,8 @@
--- Copyright 2011-15 Paul Kulchenko, ZeroBrane LLC
+-- Copyright 2011-16 Paul Kulchenko, ZeroBrane LLC
 -- authors: Luxinia Dev (Eike Decker & Christoph Kubisch)
 ---------------------------------------------------------
 
 local ide = ide
---
--- filetree, treectrl for drive & project
---
 
 ide.filetree = {
   projdir = "",
@@ -187,7 +184,7 @@ local function treeSetConnectorsAndIcons(tree)
       item_id = tree:GetItemParent(item_id)
       if not item_id:IsOk() then break end
       cur = tree:GetItemText(item_id)
-      if cur and string.len(cur) > 0 then str = cur..pathsep..str end
+      if cur and #cur > 0 then str = MergeFullPath(cur, str) end
     end
     -- as root may already include path separator, normalize the path
     local fullPath = wx.wxFileName(str)
@@ -324,7 +321,7 @@ local function treeSetConnectorsAndIcons(tree)
           or fullpath:lower():gsub(q(source:lower()), target))
         local editor = LoadFile(path)
         -- check if the file was loaded into another editor;
-        -- this is possible is "foo" is renamed to "bar" and both are opened;
+        -- this is possible if "foo" is renamed to "bar" and both are opened;
         -- if this happens, then "bar" is refreshed and "foo" can be closed.
         if doc.editor:GetId() ~= editor:GetId() then ClosePage(doc.index) end
         if not isdir and editor then PackageEventHandle("onEditorSave", editor) end
@@ -371,7 +368,10 @@ local function treeSetConnectorsAndIcons(tree)
     else
       local doc = ide:FindDocument(source)
       if doc then ClosePage(doc.index) end
-      wx.wxRemoveFile(source)
+      if not wx.wxRemoveFile(source) then
+        ReportError(TR("Unable to delete file '%s': %s")
+          :format(source, wx.wxSysErrorMsg()))
+      end
     end
     refreshAncestors(tree:GetItemParent(item_id))
     return true
@@ -509,6 +509,10 @@ local function treeSetConnectorsAndIcons(tree)
       unMapDir(tree:GetItemText(tree:GetSelection()))
       saveSettings()
     end)
+  tree:Connect(ID_PROJECTDIRFROMDIR, wx.wxEVT_COMMAND_MENU_SELECTED,
+    function()
+      ProjectUpdateProjectDir(tree:GetItemFullName(tree:GetSelection()))
+    end)
 
   tree:Connect(wx.wxEVT_COMMAND_TREE_ITEM_MENU,
     function (event)
@@ -562,6 +566,7 @@ local function treeSetConnectorsAndIcons(tree)
       local projectdirectorymenu = wx.wxMenu {
         { },
         {ID_PROJECTDIRCHOOSE, TR("Choose...")..KSC(ID_PROJECTDIRCHOOSE), TR("Choose a project directory")},
+        {ID_PROJECTDIRFROMDIR, TR("Set To Selected Directory")..KSC(ID_PROJECTDIRFROMDIR), TR("Set project directory to the selected one")},
       }
       local projectdirectory = wx.wxMenuItem(menu, ID_PROJECTDIR,
         TR("Project Directory"), TR("Set the project directory to be used"),
@@ -586,13 +591,28 @@ local function treeSetConnectorsAndIcons(tree)
         local ft = wx.wxTheMimeTypesManager:GetFileTypeFromExtension('.'..ext)
         menu:Enable(ID_OPENEXTENSION, ft and #ft:GetOpenCommand("") > 0)
         menu:Enable(ID_HIDEEXTENSION, not filetree.settings.extensionignore[ext])
+        menu:Enable(ID_PROJECTDIRFROMDIR, false)
       end
       menu:Enable(ID_SETSTARTFILE, tree:IsFileOther(item_id) or tree:IsFileKnown(item_id))
       menu:Enable(ID_SHOWEXTENSION, next(filetree.settings.extensionignore) ~= nil)
 
       PackageEventHandle("onMenuFiletree", menu, tree, event)
 
+      -- stopping/restarting garbage collection is generally not needed,
+      -- but on Linux not stopping is causing crashes (wxwidgets 2.9.5 and 3.1.0)
+      -- when symbol indexing is done while popup menu is open (with gc methods in the trace).
+      -- this only happens when EVT_IDLE is called when popup menu is open.
+      collectgarbage("stop")
+
+      -- stopping UI updates is generally not needed as well,
+      -- but it's causing a crash on OSX (wxwidgets 2.9.5 and 3.1.0)
+      -- when symbol indexing is done while popup menu is open, so it's disabled
+      local interval = wx.wxUpdateUIEvent.GetUpdateInterval()
+      wx.wxUpdateUIEvent.SetUpdateInterval(-1) -- don't update
+
       tree:PopupMenu(menu)
+      wx.wxUpdateUIEvent.SetUpdateInterval(interval)
+      collectgarbage("restart")
     end)
 
   tree:Connect(wx.wxEVT_RIGHT_DOWN,
@@ -733,6 +753,10 @@ function filetree:updateProjectDir(newdir)
   -- strip the last path separator if any
   local newdir = dirname:GetPath(wx.wxPATH_GET_VOLUME)
 
+  -- save the current interpreter as it may be reset in onProjectClose
+  -- when the project event handlers manipulates interpreters
+  local intfname = ide.interpreter and ide.interpreter.fname
+
   if filetree.projdir and #filetree.projdir > 0 then
     PackageEventHandle("onProjectClose", filetree.projdir)
   end
@@ -740,7 +764,7 @@ function filetree:updateProjectDir(newdir)
   PackageEventHandle("onProjectPreLoad", newdir)
 
   if ide.config.projectautoopen and filetree.projdir then
-    StoreRestoreProjectTabs(filetree.projdir, newdir)
+    StoreRestoreProjectTabs(filetree.projdir, newdir, intfname)
   end
 
   filetree.projdir = newdir
@@ -791,7 +815,7 @@ local function getProjectLabels()
     local parts = wx.wxFileName(proj..pathsep):GetDirs()
     table.insert(labels, ExpandPlaceholders(fmt, {
           f = proj,
-          i = interpreter and interpreter:GetName() or '?',
+          i = interpreter and interpreter:GetName() or (intfname or '')..'?',
           s = parts[#parts] or '',
         }))
   end

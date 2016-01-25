@@ -30,7 +30,8 @@ end
 -- ----------------------------------------------------------------------------
 local function createFrame()
   local frame = wx.wxFrame(wx.NULL, wx.wxID_ANY, GetIDEString("editor"),
-    wx.wxDefaultPosition, wx.wxSize(1000, 700))
+    wx.wxDefaultPosition, wx.wxSize(1100, 700))
+  frame:Center()
   -- wrap into protected call as DragAcceptFiles fails on MacOS with
   -- wxwidgets 2.8.12 even though it should work according to change notes
   -- for 2.8.10: "Implemented wxWindow::DragAcceptFiles() on all platforms."
@@ -43,12 +44,33 @@ local function createFrame()
       end
     end)
 
+  -- update best size of the toolbar after resizing
+  frame:Connect(wx.wxEVT_SIZE, function(event)
+      local mgr = ide:GetUIManager()
+      local toolbar = mgr:GetPane("toolbar")
+      if toolbar and toolbar:IsOk() then
+        toolbar:BestSize(event:GetSize():GetWidth(), ide:GetToolBar():GetClientSize():GetHeight())
+        mgr:Update()
+      end
+    end)
+
   local menuBar = wx.wxMenuBar()
   local statusBar = frame:CreateStatusBar(5)
   local section_width = statusBar:GetTextExtent("OVRW")
   statusBar:SetStatusStyles({wx.wxSB_FLAT, wx.wxSB_FLAT, wx.wxSB_FLAT, wx.wxSB_FLAT, wx.wxSB_FLAT})
   statusBar:SetStatusWidths({-1, section_width, section_width, section_width*5, section_width*4})
   statusBar:SetStatusText(GetIDEString("statuswelcome"))
+  statusBar:Connect(wx.wxEVT_LEFT_DOWN, function (event)
+      local rect = wx.wxRect()
+      statusBar:GetFieldRect(4, rect)
+      if rect:Contains(event:GetPosition()) then -- click on the interpreter
+        local menuitem = ide:FindMenuItem(ID.INTERPRETER)
+        if menuitem then
+          local menu = ide:CloneMenu(menuitem:GetSubMenu())
+          if menu then statusBar:PopupMenu(menu) end
+        end
+      end
+    end)
 
   local mgr = wxaui.wxAuiManager()
   mgr:SetManagedWindow(frame)
@@ -245,13 +267,14 @@ local function createNotebook(frame)
       or event:GetId() == ID_CLOSE and notebook:GetPageCount() <= 1)
     then event:Enable(false) end
   end
-  local function IfModified(event) event:Enable(EditorIsModified(GetEditor(selection))) end
 
   notebook:Connect(ID_SAVE, wx.wxEVT_COMMAND_MENU_SELECTED, function ()
-      local editor = GetEditor(selection)
-      SaveFile(editor, ide.openDocuments[editor:GetId()].filePath)
+      ide:GetDocument(GetEditor(selection)):Save()
     end)
-  notebook:Connect(ID_SAVE, wx.wxEVT_UPDATE_UI, IfModified)
+  notebook:Connect(ID_SAVE, wx.wxEVT_UPDATE_UI, function(event)
+      local doc = ide:GetDocument(GetEditor(selection))
+      event:Enable(doc:IsModified() or doc:IsNew())
+    end)
   notebook:Connect(ID_SAVEAS, wx.wxEVT_COMMAND_MENU_SELECTED, function()
       SaveFileAs(GetEditor(selection))
     end)
@@ -296,6 +319,7 @@ local function addDND(notebook)
         if winid == ide:GetOutput():GetId()
         or winid == ide:GetConsole():GetId()
         or winid == ide:GetProjectTree():GetId()
+        or ide.findReplace:IsPreview(win) -- search results preview
         then return end
 
         local mgr = ide.frame.uimgr
@@ -419,8 +443,7 @@ local function createBottomNotebook(frame)
 
   errorlog:Connect(wx.wxEVT_CONTEXT_MENU,
     function (event)
-      errorlog:PopupMenu(
-        wx.wxMenu {
+      local menu = wx.wxMenu {
           { ID_UNDO, TR("&Undo") },
           { ID_REDO, TR("&Redo") },
           { },
@@ -431,7 +454,8 @@ local function createBottomNotebook(frame)
           { },
           { ID_CLEAROUTPUT, TR("C&lear Output Window") },
         }
-      )
+      PackageEventHandle("onMenuOutput", menu, errorlog, event)
+      errorlog:PopupMenu(menu)
     end)
 
   errorlog:Connect(ID_CLEAROUTPUT, wx.wxEVT_COMMAND_MENU_SELECTED,
@@ -439,6 +463,31 @@ local function createBottomNotebook(frame)
 
   local shellbox = ide:CreateStyledTextCtrl(bottomnotebook, wx.wxID_ANY,
     wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxBORDER_NONE)
+
+  local menupos
+  shellbox:Connect(wx.wxEVT_CONTEXT_MENU,
+    function (event)
+      local menu = wx.wxMenu {
+          { ID_UNDO, TR("&Undo") },
+          { ID_REDO, TR("&Redo") },
+          { },
+          { ID_CUT, TR("Cu&t") },
+          { ID_COPY, TR("&Copy") },
+          { ID_PASTE, TR("&Paste") },
+          { ID_SELECTALL, TR("Select &All") },
+          { },
+          { ID_SELECTCONSOLECOMMAND, TR("&Select Command") },
+          { ID_CLEARCONSOLE, TR("C&lear Console Window") },
+        }
+      menupos = event:GetPosition()
+      PackageEventHandle("onMenuConsole", menu, shellbox, event)
+      shellbox:PopupMenu(menu)
+    end)
+
+  shellbox:Connect(ID_SELECTCONSOLECOMMAND, wx.wxEVT_COMMAND_MENU_SELECTED,
+    function(event) ConsoleSelectCommand(menupos) end)
+  shellbox:Connect(ID_CLEARCONSOLE, wx.wxEVT_COMMAND_MENU_SELECTED,
+    function(event) ide:GetConsole():Erase() end)
 
   bottomnotebook:AddPage(errorlog, TR("Output"), true)
   bottomnotebook:AddPage(shellbox, TR("Local console"), false)

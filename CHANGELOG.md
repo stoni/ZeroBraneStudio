@@ -1,5 +1,389 @@
 # ZeroBrane Studio Changelog
 
+## v1.30 (Jan 21 2016)
+
+### Highlights
+  - Added `markers` panel to show and navigate bookmarks and breakpoints.
+  - Added saving/restoring bookmarks and breakpoints.
+  - Added breakpoint prev/next navigation (`Project | Breakpoint` menu).
+  - Added find/replace in selection to search operations.
+  - Added printing of editor tabs and Console/Output windows (available on Windows and OSX).
+  - Added recursive processing of configuration files (using `include` command).
+  - Added `outline.showcompact` setting to keep outline more compact for large files.
+  - Added opening multiple files from the `Open` dialog.
+  - Updated Corona API for v2015.2731 and added handling of type inheritance.
+  - Updated love2d API for v0.10.0.
+
+### Special thanks
+  - To [tmiv](https://github.com/tmiv) for allowing shortcuts to be added to tools menu items.
+  - To [Yonaba](https://github.com/Yonaba/) for French translation update.
+  - To [Leo Bartoloni](https://github.com/bartoleo) for Italian translation update.
+  - To [Inigo Sola](https://github.com/inigosola) for Spanish translation update.
+
+### Improvements
+  - Added `CloneMenu` package method (#166).
+  - Added Torch and Redis debugging links.
+  - Added `IsNew` method for documents (#166).
+  - Added `Print` method and updated core components to use it during launch.
+  - Added skipping `UPDATE_CONTENT` events on cursor blinks in `UPDATEUI` (#419).
+  - Added preserving markers after sorting/reindentation operations.
+  - Added editor `MarkerGetAll` method (#166).
+  - Added example on how to set breakpoint shortcuts used in v1.20 or earlier (#419).
+  - Added processing of `include` command without extension in config (#555).
+  - Added reporting of missing packages when using `package` command in config (#555).
+  - Added processing of `package` command without extension in config (#555).
+  - Added hint on using updated breakpoint shortcut (#419).
+  - Added breakpoint prev/next navigation (#419).
+  - Added `AttachMenu` package method (#166).
+  - Added `MarkerToggle` editor method (#166).
+  - Added `MarkerGotoNext` and `MarkerGotoPrev` editor methods (#166).
+  - Added local menu to the `Markers` panel to toggle markers (#419).
+  - Added saving/restoring bookmarks and breakpoints (#419).
+  - Added `BookmarkToggle` method to the editor (#166).
+  - Added `BreakpointToggle` method to the editor (#166).
+  - Added `markers` panel to show bookmarks and breakpoints (#419).
+  - Added `onEditorMarkerUpdate` event (#166).
+  - Added unfolding fragments that include activated line during debugging (closes #575).
+  - Added skipping comment when none is provided in the Stack (instead of showing `nil`).
+  - Added skipping comments in the lexer to avoid splitting statements (fixes #568).
+  - Added `GetExePath` method for the interpreter (#166).
+  - Added package `GetFilePath` method (#166).
+  - Added `showhiddenfiles` option to show hidden files in the filetree (closes #561).
+  - Added package `RemovePanel` method (#166).
+  - Added loading of custom package from the config file (closes #555).
+  - Added `Alt-Enter` to "replace all" when replace field is selected in the search panel.
+  - Added setting project directory to the selected directory to the project tree menu.
+  - Added ignoring `Ctrl-CapsLock` in the editor that was shrinking the font.
+  - Added recursive processing of configuration files with relative names (#555).
+  - Added moving cursor to the end of the pasted fragment (#556).
+  - Added workaround for copying UTF-8 invalid data to/from clipboard (#260, #556).
+  - Added `CloseAll` and `CloseAllExcept` document methods (#166).
+  - Added warning in the interpreter when a short name not generated on Windows (closes #559).
+  - Added check for recover record to be fully present.
+  - Added using `*Raw` methods when available for handling of invalid UTF-8 chars (#260, #556).
+  - Added `FileRemove` method (#166).
+  - Added package `onAppDone` method (#166).
+  - Added sorting the list of known extensions.
+  - Added `outline.showcompact` setting to keep outline more compact for large files (closes #549).
+  - Added updating selection boundaries after replace-in-selection (#547).
+  - Added resizing toolbar background after resizing the application window.
+  - Added timing to the tests.
+  - Added context menu item to clear text in the Console window.
+  - Added context menu to select a (clicked on) command in the Console window.
+  - Added `onMenuConsole` event (#166).
+  - Added reporting printing progress (#540).
+  - Added package `IsValidProperty` method (#166).
+  - Added separator to the print-related menu items on OSX (#540).
+  - Added header/footer printing (#540).
+  - Added printing of the current editor tab (closes #540).
+  - Add package `GetIndicators` method (#166).
+  - Added `editor.wrapmode` to configure wrapping mode in the editor.
+  - Added reporting of another instance running under a different user (closes #542).
+  - Added opening multiple files from the `Open` dialog (closes #541).
+  - Allowed reading input in the Output window without printing something first (closes #538).
+  - Allow shortcuts to be added to tools menu items
+  - Extended PATH on OSX with `/usr/local/bin` to provide access to tools in that folder (#356).
+  - Improved compatibility when running the IDE using Lua 5.2.
+  - Improved handling of names with Unicode chars during debugging on Windows (#559).
+  - Limited requesting attention on debugging starts to happen when debugging is suspended.
+  - Moved wxlua version number to a better location in the About screen.
+  - Optimized path generation in directory traversal (#260).
+  - Removed a workaround for wxlua build issue as it's no longer needed.
+  - Replaced `ConsoleClear` with `Erase` methods for the Console object.
+  - Removed search panel from the list of floated panels as it shouldn't be there.
+  - Removed `allowinteractivescript` setting as it doesn't need to be configurable (#538).
+  - Replaced `EditorIsModified` with document method calls.
+  - Spanish translation updated
+  - Switched to using client size instead of system metric to get screen width (#260).
+  - Switched to using `KEY` event in search panel to make it work with wxwidgets 3.1+ (#260).
+  - Switched to per-editor tracking in `UPDATEUI` event.
+  - Updated `interpreter` menu to use a clone to avoid Linux assertion.
+  - Updated Italian Translation (closes #586).
+  - Updated french translation as of df381b5 (see #70)
+  - Updated Russian translation (#70).
+  - Updated translation files with new messages (#70).
+  - Updated LuaForWindows interpreter to accept command line parameters (#582).
+  - Updated LuaForWindows interpreter to properly pass `arg` to the script (closes #582).
+  - Updated `GetDocument` to not fail when no editor is passed.
+  - Updated live coding to group number updates together for `Undo`/`Redo` purposes.
+  - Updated `Toggle Breakpoint` and `Break` shortcuts for consistency (#419).
+  - Updated love2d API for v0.10.0 (#247).
+  - Updated script to process new love2d API format (with `variants`).
+  - Updated showing filename of the missing interpreter in the project list (#570).
+  - Updated build scripts to use own wxwidgets repository to better sync build versions (#260).
+  - Updated build scripts to remove an error from the check for missing methods in wxlua.
+  - Updated README to remove outdated .ini reference from Estrela section.
+  - Updated instructions in the `estrela` configuration file to reference `include` command.
+  - Updated luasec build script to use the latest openSSL version (1.0.2d).
+  - Updated UTF-8 validation to use wxwidgets libraries for better performance (#556).
+  - Updated clipboard copy to make non-UTF-8 data to work on OSX (#260, #556).
+  - Updated Console history to work with UTF-8 invalid strings (#260, #556).
+  - Updated `Ctrl/Shift-Ins` and `Shift-Del` to work in all editors (#260, #556).
+  - Updated `Output` and `Console` to display invalid characters as is (#260, #556).
+  - Updated config sample to remove no longer needed `G` references.
+  - Updated config processing to simplify access to global functions.
+  - Updated config processing to allow use of `package` field.
+  - Updated windows launcher code to use manifest for hidpi awareness.
+  - Updated `AddConfig` method to accept single filename in addition to a list (#166).
+  - Updated event handling to better handle events that are executed once (#260).
+  - Updated `sample` package events for more accurate output.
+  - Updated default size/position for the first launch without saved settings.
+  - Updated tests to use a separate .ini file to minimize conflicts.
+  - Updated Corona API for v2015.2731.
+  - Updated Corona API processing script to follow Lua guidelines.
+  - Updated Corona API processing script to handle type inheritance.
+  - Updated `Save As`/`Open` command to use editor specific extensions instead of all.
+  - Updated capturing editor information during search to work with selections (#547, #416).
+  - Updated `Replace` and `Replace All` to take selection into account (#547, #416).
+  - Updated toolbar icons to fix black color in some images.
+  - Updated `SetDllDirectory` handling to avoid breaking dlopen with wxwidgets 3.1+ (#260).
+  - Updated Corona interpreter to avoid caching specified path.
+  - Updated tests to handle platform-specific tests.
+  - Updated directory traversing tests to work with smaller directories.
+  - Updated default file mask to match files without extension (#260).
+  - Updated tests to use a package instead of the obsolete app method.
+  - Updated wxwidget path in the build script to use git repository after wxwidgets migration.
+  - Updated menu shortcuts to avoid conflicts in the `File` menu (#540).
+  - Updated README with features in 1.20.
+
+### Fixes
+  - Fixed showing cursor in search panel fields after file search.
+  - Fixed reapplying markers after reloading modified file (#419).
+  - Fixed setting interpreter after launching with non-existing project.
+  - Fixed showing package errors during project switches (#555).
+  - Fixed `include` command not checking needed `packages` folders to load from (#555).
+  - Fixed resetting the default interpreter after selecting a non-existent one.
+  - Fixed restoring project-specific interpreter when switching projects (#570).
+  - Fixed restoring project-specific interpreter after relaunch (fixes #570).
+  - Fixed expanding sub-trees in project directory when set to the disk root on Windows.
+  - Fixed search navigation after selecting one variable instance (fixes #565).
+  - Fixed editing fragments in folded text (follow-up to d2ddc96a; #564).
+  - Fixed editing multiple selections when selection is in folded fragments (fixes #564).
+  - Fixed copy/paste on Windows when UTF-8 invalid strings end in new line (#260, #556).
+  - Fixed debugging of Busted scripts (closes #552).
+  - Fixed skipping editor tabs when clicked in some cases on OSX (closes #546).
+  - Fixed toolbar size not being adjusted on the very first launch.
+
+### Incompatibilities
+  - Changed `Toggle Breakpoint` shortcut from `F9` to `Ctrl/Cmd-F9`.
+  - Removed `Project | Break` shortcut to avoid conflict with breakpoint navigation.
+  - Removed `allowinteractivescript` setting as no longer needs to be configurable (#538).
+
+## v1.20 (Oct 08 2015)
+
+### Highlights
+  - Added symbol indexing of project files for project-wide search.
+  - Added support for `file@symbol` fuzzy search (#385).
+  - Added processing of `ini` setting relative to the IDE location (#483).
+  - Improved memory handling for large files.
+  - Improved application performance and memory usage.
+  - Improved auto-complete order of results and suggestions for case-sensitive matches.
+  - Updated Windows launcher to add dpi awareness for high dpi monitors.
+  - Upgraded Lua 5.3 interpreter to 5.3.1.
+  - Fixed a memory leak after a search panel is opened.
+  - Fixed an occasional crash from the filetree on Linux (#425, #464).
+  - Fixed recursive file traversal to skip directories when mask is specified.
+
+### Special thanks
+  - To [riidom](https://github.com/riidom) for German translation update.
+  - To [Yonaba](https://github.com/Yonaba/) for French translation update.
+  - To [Leo Bartoloni](https://github.com/bartoleo) for Italian translation update.
+  - To [Christoph Kubisch](https://github.com/pixeljetstream) for glslc updates.
+  - To Brigham Toskin for auto-complete improvements.
+  - To Joergen von Bargen for optimized UTF8 validation.
+  - To Nick Smith for Marmalade interpreter updates.
+
+### Improvements
+  - Added handling of translation messages that require pluralization (#70).
+  - Added check for non-zero file size before reporting load progress (#530).
+  - Added switching interpreters by clicking on the interpreter label in the status bar.
+  - Added handling of editor commands (Copy/Paste/SelectAll/Undo/Redo) in search panel controls.
+  - Added position to the end-of-file lexer token (closes #529).
+  - Added reporting when a file can't be removed from a project tree.
+  - Added explicit initialization for `editor.autoactivate` default setting.
+  - Added allowing `editor.saveallonrun` with `infervalue` static analyzer (closes #524).
+  - Added support for `include` command in config files.
+  - Added document `Close` method (#166).
+  - Added descriptions for new Lua 5.3 `math.*` and `coroutine.*` functions.
+  - Added functions new to Lua 5.3 to the list of keywords.
+  - Added reporting of deserialization failures for saved package data.
+  - Added collapsing white spaces from names shown in the Outline.
+  - Added workaround for a memory leak in wxlua after a search panel is opened.
+  - Added jumping to the current function in the outline (#515).
+  - Added highlighting current functions for better visibility (#515).
+  - Added skipping unneded fields from the symbol index to reduce memory usage (#515).
+  - Added showing position of the current function in the Outline (closes #515).
+  - Added explicit editor destroy during find and replace to conserve memory.
+  - Added explicit editor destroy during symbol indexing to conserve memory.
+  - Added turning jitting on when running under LuaJIT.
+  - Added `Run to Cursor` to the popup menu in the editor (#413).
+  - Added showing memory usage stats in the status bar configured by `showmemoryusage`.
+  - Added skipping opening a file from symbol search when nothing is matched.
+  - Added skipping directories during directory traversal (#499).
+  - Added `SetStatusFor` package method to set temporary status (#166).
+  - Added forcing immediate refresh of symbol index when requested from the menu (#499).
+  - Added `onMenuOutput` event (#166).
+  - Added `onMenuWatch` event (#166).
+  - Added disabling symbol indexing for directories/projects (#499).
+  - Added refreshing of symbol index to the project menu (#499).
+  - Added reporting of the number of files queued for indexing (#499).
+  - Added reporting when indexing is completed (#499).
+  - Added `GetOutline` package method (#166, #499).
+  - Added exclusion to not report `arg` as global in static analysis (closes #503).
+  - Added `commandbar.width` to set the width of command bar.
+  - Added skipping symbol index queue when symbol inactivity is not set (#499).
+  - Added setting different types of indentation guides.
+  - Added optimization with prefiltering for short patterns (#31, #499).
+  - Added status message during index update (#499).
+  - Added purging of outdated cache for symbol indexing (#499).
+  - Added symbol processing of tabs that are not saved yet (#499).
+  - Added indexing of project files (#499).
+  - Added `commandbar.maxitems` configuration setting (#499).
+  - Added caching of symbols for open files (#499).
+  - Added support for `file.lua@symbol` fuzzy search (#385).
+  - Added symbol search in all open files (#385).
+  - Added check to avoid loops in type assignment during auto-complete (#498).
+  - Added primitive handling of `require` in type assignments for known APIs (fixes #498).
+  - Added support for aborting file reading callback (#491).
+  - Added progress display when loading large files (#491).
+  - Added status methods: `GetStatus`, `PushStatus`, and `PopStatus` (#166).
+  - Added `onMenuOutline` callback (#166, #337).
+  - Added ability to toggle outline sorting from the local menu (#337, #494).
+  - Added activating Output panel after compilation errors.
+  - Added package `SetStatus` method (#166).
+  - Added `Ctrl/Cmd-Enter`/`Ctrl/Cmd-Shift-Enter` to add line after/before the current one (#334).
+  - Added ignoring current selection in auto-complete with `Shift-Enter` (closes #494).
+  - Added hiding auto-complete after typing one of the offered options (#494).
+  - Added activating Output notebook to show search results if it's hidden (#416).
+  - Added reporting of errors when unable to open file for static analysis.
+  - Added collapsing whitespaces in function parameters in the outline (#337).
+  - Added emphasis for the preference type in the config file template.
+  - Added `FileSize` method as the default one returns non-zero result for non-existing files.
+  - Added reporting of `FileWrite` failing to write the entire content.
+  - Added package methods `AddIndicator`, `GetIndicator`, and `RemoveIndicator` (#166).
+  - Added missing `Detach Process` id to keymap (pkulchenko/MobDebug#19).
+  - Added a check for `ini` setting pointing to a path with a writeable directory (#483).
+  - Added a check for `ini` setting pointing to a directory (#483).
+  - Added processing of `ini` setting relative to the IDE location (closes #483).
+  - Added Watch view refresh after switching focus when needed.
+  - Added Stack view refresh after switching focus when needed.
+  - Added forced `Refresh`/`Update` to improve redrawing of commandbar on Windows 8.
+  - Added a check for a window to be shown to avoid callback recursion on OSX (fixes #473).
+  - Added package `IsWindowShown` method (#166).
+  - Added package `onEditorPreClose` event (#166, closes #461).
+  - Added deleting the rest of the word on auto-complete (`acandtip.droprest`).
+  - Added closing editor tab when renaming to an open file from the project tree.
+  - Added refresh of the target file after renaming from the project tree.
+  - Added a check for object with a focus (occasionally triggered on Linux).
+  - Added workaround to fix crash on Linux from the project tree (#425, #464).
+  - Added `DoWhenIdle` package method (#166).
+  - Disabled unhiding one of wxwidgets windows that is only used for message passing (Windows).
+  - Disabled initial highlight when showing current function disabled in the outline (#515).
+  - Disabled dragging out search results tab to avoid unexpected results (#416).
+  - Enabled compilation during running/debugging (closes #479).
+  - Enabled static analysis during running/debugging (#479).
+  - Integrate ZeroBrane with Marmalade's Hub GUI
+  - Improved auto-complete suggestions for case-sensitive matches.
+  - Improved compactness of saved package settings (#166, #499).
+  - Improved performance of saving symbol index data (#499).
+  - Improved memory usage when closing large files (#491).
+  - Improved handling of large files (#491).
+  - Improved the order of results in auto-complete (closes #469).
+  - glslc tool: add menu option for pre-process mode
+  - Optimized saving package settings (#166, #499).
+  - Optimized UTF8 validation (thanks to Joergen von Bargen).
+  - Optimized handling of multi-line changes in the editor (closes #477).
+  - Removed forced garbage collection as it led to crashes on Linux (#425, closes #464).
+  - Revised: auto-complete results (amends #469, w/@pkulchenko patch)
+  - Switched to the bottom location for the search results by default (#416).
+  - Updated italian translations (thanks to Leo Bartoloni)
+  - Updated Russian translation (#70).
+  - Update de.lua (thanks to riidom)
+  - Updated french translation as of commit (thanks to Yonaba)
+  - Updated translation files for new messages (#70).
+  - Updated translation logic to accept empty tables for pluralization values (#70).
+  - Updated build scripts to use the most recent releases of LuaJIT and Lua 5.2.
+  - Updated OSX launcher to keep `DYLD_LIBRARY_PATH` if already set.
+  - Updated build scripts to use the most recent releases of LuaJIT and Lua 5.2.
+  - Update marmalade API definition to 7.9
+  - Updated static analyzer (luainspect) to take globals in 'required' files into account (#520).
+  - Updated static analyzer to refresh cache of 'required' modules (#520).
+  - Updated C/cpp spec to skip `if(...)` from the list of functions.
+  - Updated C/cpp spec to properly handle functions at the beginning of a file.
+  - Updated package data serialization to use simpler dumper for faster processing.
+  - Updated saving symbol index to be called less frequently (#499).
+  - Updated list of fields to skip from saved symbol index (#499).
+  - Updated Run/Debug to not force saving new tabs when `Start` file is set.
+  - Updated interpreter handling to allow setting of default value in the config (closes #518).
+  - Updated highlighting of the current function in the Outline to select one item (#515).
+  - Updated auto-complete to close when one of the options matches the current input.
+  - Updated applying limit to the commandbar results to allow them to be resorted.
+  - Updated status messages for better visibility on OSX during index refresh (#499).
+  - Updated tracking of editor updates to skip unneeded notifications on OSX (#499).
+  - Updated symbol refresh to do processing as soon as the path is known (#499).
+  - Updated symbol index to skip unused elements in serialization (#499).
+  - Updated prefiltering to limit prefix to avoid penalty for long `s.*s.*s...` (#31).
+  - Updated package `SetSettings` method to allow passing of additional parameters (#166).
+  - Updated status of files indexing for symbol search (#499).
+  - Updated `DoWhenIdle` handling to gracefully handle a long queue.
+  - Updated `Go To Symbol` to refresh files loaded in the preview (#499, #385).
+  - Updated symbol search to only refresh outline when it's not populated (#385).
+  - Updated search logic to avoid showing search results in recent files (#416).
+  - Updated line number handling to adjust for large files (#491).
+  - Updated `busted` interpreter to check for proper extension on Windows (closes #495).
+  - Updated handling of binary and utf8 validness checks for large files (#491).
+  - Updated build scripts for Lua 5.3 to use 5.3.1.
+  - Updated toolbar to show large icons by default on large screens.
+  - Updated outline to only retrieve entry text when there are tokens to process (#337).
+  - Updated getting text length without requesting editor content.
+  - Updated showing function indicator handling to allow for easier enabling.
+  - Updated indicator processing to use new API.
+  - Updated ID references in toolbar to use the new access method.
+  - Updated ID references in keymap to use the new access method.
+  - Updated `Detach Process` to allow access to it while the process is running.
+  - Updated metalua/static analyzer to accept long integer and imaginary numbers (closes #482).
+  - Updated internal parser to accept long integer, imaginary, and floating point hex numbers (#482).
+  - Updated internal parser to accept numbers that start with a period (#482).
+  - Updated compilation and static analysis to keep output when running/debugging (#479).
+  - Updated indentation after strings with brackets and escaped quotes (#324).
+  - Updated `AnalyzeString` to add filename parameter (closes #463).
+  - Updated Windows launcher to add dpi awareness for high dpi monitors.
+  - Upgraded Lua 5.3 interpreter to 5.3.1 on Linux (x86 and x64).
+  - Upgraded Lua 5.3 interpreter to 5.3.1 on OSX.
+  - Upgraded Lua 5.3 interpreter to 5.3.1 on Windows (closes #453, closes #460).
+  - Upgraded Mobdebug (0.628) to include `keyignore` serializer option.
+  - Upgraded Mobdebug (0.627) to improve debugging of code with overloaded `string` methods.
+  - Upgraded Mobdebug (0.624) to make `DONE` async and to add `__tostring` protection (closes #446).
+
+### Fixes
+  - Fixed text search and fuzzy symbol search in symlinks (#458, #530).
+  - Fixed opening only one tab for external debugging of dynamic code on Linux (closes #526).
+  - Fix live picking up debug vs release binaries (Marmalade)
+  - Fixed highlighting for those specs that don't have information on where functions end (#515).
+  - Fixed highlighting the current function when anonymous functions are hidden (#515).
+  - Fixed styling of comments that include markup inside markup (fixes #514).
+  - Fixed updating symbols in new files that haven't been indexed yet (#499).
+  - Fixed opening empty files (fixes #510).
+  - Fixed autocomplete for words that may include underscores in suggestions.
+  - Fixed crash on OSX during symbol indexing when filetree menu is open (#499).
+  - Fixed crash on Linux during symbol indexing when filetree menu is open (fixes #507).
+  - Fixed duplicates between variables and dynamic words in auto-complete.
+  - Fixed uncommenting of the last line in the selection to keep un/comment reversible (fixes #509).
+  - Fixed assignment parsing when the type value is re-assigned (#498).
+  - Fixed mouse selection in auto-complete on OSX (fixes #496).
+  - Fixed fuzzy file search to not double open already opened files (#31).
+  - Fixed indentation of lines that end with partial long strings with opening brackets (#324).
+  - Fixed indentation of lines with long strings that include opening brackets (#324).
+  - Fixed indicators on table fields after variables that look like multiple assignments (#492).
+  - Fixed indicators on table fields after variables (fixes #492).
+  - Fixed variable usage based on static analysis.
+  - Fixed initial select-and-find search.
+  - Fixed returning focus to the editor after find-in-files followed by page search (#416).
+  - Fixed performance of initial fuzzy search for line numbers (closes #476).
+  - Fixed Output tab name when debugging aborted after run-time error.
+  - Fixed recursive file traversal to skip directories when mask is specified.
+  - Fixed crash in `collectgarbage` from the filetree on Linux (#425, #464).
+
 ## v1.10 (May 13 2015)
 
 ### Highlights

@@ -140,14 +140,18 @@ end
 
 function FileSysGetRecursive(path, recursive, spec, opts)
   local content = {}
+  local showhidden = ide.config and ide.config.showhiddenfiles
   local sep = GetPathSeparator()
+  -- trip trailing separator and adjust the separator in the path
+  path = path:gsub("[\\/]$",""):gsub("[\\/]", sep)
   local queue = {path}
-  local pathpatt = "^"..EscapeMagic(path)
+  local pathpatt = "^"..EscapeMagic(path)..sep.."?"
   local optyield = (opts or {}).yield
   local optfolder = (opts or {}).folder ~= false
   local optsort = (opts or {}).sort ~= false
   local optpath = (opts or {}).path ~= false
   local optskipbinary = (opts or {}).skipbinary
+  local optondirectory = (opts or {}).ondirectory
 
   local function spec2list(spec, list)
     -- return empty list if no spec is provided
@@ -218,25 +222,28 @@ function FileSysGetRecursive(path, recursive, spec, opts)
     -- recursion is done in all folders if requested,
     -- but only those folders that match the spec are returned
     local _ = wx.wxLogNull() -- disable error reporting; will report as needed
-    local found, file = dir:GetFirst("*", wx.wxDIR_DIRS)
+    local found, file = dir:GetFirst("*",
+      wx.wxDIR_DIRS + ((showhidden == true or showhidden == wx.wxDIR_DIRS) and wx.wxDIR_HIDDEN or 0))
     while found do
-      local fname = wx.wxFileName(path, file):GetFullPath()
+      local fname = path..sep..file
       if optfolder and ismatch(fname..sep, inmasks, exmasks) then
         report((optpath and fname or fname:gsub(pathpatt, ""))..sep)
       end
 
+      if recursive and ismatch(fname..sep, nil, exmasks)
+      and (not optondirectory or optondirectory(fname) ~= false)
       -- check if this name already appears in the path earlier;
       -- Skip the processing if it does as it could lead to infinite
       -- recursion with circular references created by symlinks.
-      if recursive and ismatch(fname..sep, nil, exmasks)
       and select(2, fname:gsub(EscapeMagic(file..sep),'')) <= 2 then
         table.insert(queue, fname)
       end
       found, file = dir:GetNext()
     end
-    found, file = dir:GetFirst(spec or "*", wx.wxDIR_FILES)
+    found, file = dir:GetFirst(spec or "*",
+      wx.wxDIR_FILES + ((showhidden == true or showhidden == wx.wxDIR_FILES) and wx.wxDIR_HIDDEN or 0))
     while found do
-      local fname = wx.wxFileName(path, file):GetFullPath()
+      local fname = path..sep..file
       if ismatch(fname, inmasks, exmasks) then
         report(optpath and fname or fname:gsub(pathpatt, ""))
       end
@@ -297,7 +304,16 @@ function FileWrite(file, content)
   return ok, not ok and wx.wxSysErrorMsg() or nil
 end
 
-function FileSize(fname) return wx.wxFileExists(fname) and wx.wxFileSize(fname) or nil end
+function FileSize(fname)
+  if not wx.wxFileExists(fname) then return end
+  local size = wx.wxFileSize(fname)
+  -- size can be returned as 0 for symlinks, so check with wxFile:Length();
+  -- can't use wxFile:Length() as it's reported incorrectly for some non-seekable files
+  -- (see https://github.com/pkulchenko/ZeroBraneStudio/issues/458);
+  -- the combination of wxFileSize and wxFile:Length() should do the right thing.
+  if size == 0 then size = wx.wxFile(fname, wx.wxFile.read):Length() end
+  return size
+end
 
 function FileRead(fname, length, callback)
   -- on OSX "Open" dialog allows to open applications, which are folders
@@ -321,9 +337,14 @@ function FileRead(fname, length, callback)
     return true, wx.wxSysErrorMsg()
   end
 
-  local _, content = file:Read(length or wx.wxFileSize(fname))
+  local _, content = file:Read(length or FileSize(fname))
   file:Close()
   return content, wx.wxSysErrorMsg()
+end
+
+function FileRemove(file)
+  local _ = wx.wxLogNull() -- disable error reporting; will report as needed
+  return wx.wxRemoveFile(file), wx.wxSysErrorMsg()
 end
 
 function FileRename(file1, file2)
@@ -368,6 +389,7 @@ function FixUTF8(s, repl)
         or s:find("^[\241-\243][\128-\191][\128-\191][\128-\191]", p)
         or s:find(       "^\244[\128-\143][\128-\191][\128-\191]", p) then p = p + 4
     else
+      if not repl then return end -- just signal invalid UTF8 string
       local repl = type(repl) == 'function' and repl(s:sub(p,p)) or repl
       s = s:sub(1, p-1)..repl..s:sub(p+1)
       table.insert(invalid, p)
@@ -419,11 +441,11 @@ function TR(msg, count)
   -- if there is count and no corresponding message, then
   -- get the message from the (default) english language,
   -- otherwise the message is not going to be pluralized properly
-  if count and not message then
+  if count and (not message or type(message) == 'table' and not next(message)) then
     message, counter = messages.en[msg], messages.en[0]
   end
   return count and counter and message and type(message) == 'table'
-    and message[counter(count)] or message or msg
+    and message[counter(count)] or (type(message) == 'string' and message or msg)
 end
 
 -- wxwidgets 2.9.x may report the last folder twice (depending on how the
@@ -452,9 +474,8 @@ end
 
 function LoadLuaFileExt(tab, file, proto)
   local cfgfn,err = loadfile(file)
-  local report = DisplayOutputLn or print
   if not cfgfn then
-    report(("Error while loading file: '%s'."):format(err))
+    ide:Print(("Error while loading file: '%s'."):format(err))
   else
     local name = file:match("([a-zA-Z_0-9%-]+)%.lua$")
     if not name then return end
@@ -470,7 +491,7 @@ function LoadLuaFileExt(tab, file, proto)
 
     local success, result = pcall(function()return cfgfn(assert(_G or _ENV))end)
     if not success then
-      report(("Error while processing file: '%s'."):format(result))
+      ide:Print(("Error while processing file: '%s'."):format(result))
     else
       if (tab[name]) then
         local out = tab[name]
@@ -479,33 +500,37 @@ function LoadLuaFileExt(tab, file, proto)
         end
       else
         tab[name] = proto and result and setmetatable(result, proto) or result
+        if tab[name] then tab[name].fpath = file end
       end
     end
   end
+  return tab
 end
 
 function LoadLuaConfig(filename,isstring)
   if not filename then return end
   -- skip those files that don't exist
-  if not isstring and not wx.wxFileName(filename):FileExists() then return end
+  if not isstring and not wx.wxFileExists(filename) then return end
   -- if it's marked as command, but exists as a file, load it as a file
-  if isstring and wx.wxFileName(filename):FileExists() then isstring = false end
+  if isstring and wx.wxFileExists(filename) then isstring = false end
 
   local cfgfn, err, msg
   if isstring
   then msg, cfgfn, err = "string", loadstring(filename)
   else msg, cfgfn, err = "file", loadfile(filename) end
 
-  local report = DisplayOutputLn or print
   if not cfgfn then
-    report(("Error while loading configuration %s: '%s'."):format(msg, err))
+    ide:Print(("Error while loading configuration %s: '%s'."):format(msg, err))
   else
     setfenv(cfgfn,ide.config)
+    table.insert(ide.configqueue, filename)
     local _, err = pcall(function()cfgfn(assert(_G or _ENV))end)
+    table.remove(ide.configqueue)
     if err then
-      report(("Error while processing configuration %s: '%s'."):format(msg, err))
+      ide:Print(("Error while processing configuration %s: '%s'."):format(msg, err))
     end
   end
+  return true
 end
 
 function LoadSafe(data)
@@ -590,7 +615,7 @@ function ExpandPlaceholders(msg, ph)
     S = doc and doc:GetFileName() or "",
     F = doc and doc:GetFilePath() or "",
     n = editor and editor:GetCurrentLine()+1 or 0,
-    c = editor and editor:GetLine(editor:GetCurrentLine()) or "",
+    c = editor and editor:GetLineDyn(editor:GetCurrentLine()) or "",
     T = GetIDEString("editor") or "",
     v = ide.VERSION,
     t = editor and nb:GetPageText(nb:GetPageIndex(editor)) or "",
